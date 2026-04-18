@@ -3,7 +3,14 @@ import { METHODS } from "node:http"
 const router = Router();
 const methods = METHODS.map(m => m.toLowerCase())
 
-const abcd = [];
+const routeTree = {}
+
+
+const r2 = Router()
+
+router.use("/abcd",r2)
+
+type Args = Parameters<typeof Router>
 
 function SuperRouter() {
     const router = Router();
@@ -18,6 +25,15 @@ function SuperRouter() {
             }
         }
     }
+
+    obj["user"] = (...args)=>{
+        let path = args[0]
+        if (typeof path === "string") {
+            
+            routeTree[path] = {}
+        }
+    }
+
     return obj;
 }
 

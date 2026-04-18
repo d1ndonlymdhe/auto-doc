@@ -1,0 +1,4 @@
+ root :object [0m[33mfalse[0m
+     name  : string [0m[33mtrue[0m
+     data :object [0m[33mfalse[0m
+         height  : string [0m[33mfalse[0m
