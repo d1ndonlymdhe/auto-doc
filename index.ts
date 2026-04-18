@@ -26,7 +26,7 @@ function SuperRouter() {
         }
     }
 
-    obj["user"] = (...args)=>{
+    obj["use"] = (...args)=>{
         let path = args[0]
         if (typeof path === "string") {
             

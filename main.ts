@@ -55,7 +55,6 @@ let x = CreateSuccessZod(SuccessCode.OK, z.object({
 
 let schema = x.schema;
 
-console.log(schema.shape.data)
 
 
 interface SuccessResponse<T> {
@@ -180,7 +179,7 @@ ROOT_ROUTER.use("/hello", SUB_ROUTER)
 
 app.use(ROOT_ROUTER);
 
-// console.log((ROOT_ROUTER.__meta__));
+console.log((ROOT_ROUTER.__meta__));
 
 function buildRouteGraph(router: ReturnType<typeof TypedRouter>) {
     const graph = {}
