@@ -1,11 +1,9 @@
 import { Router } from "express";
-import { randomUUID } from "crypto"
 import z from "zod"
 import express from "express"
-
+import { ZodRepr } from "./reflection";
 
 function TypedRouter() {
-    const id = randomUUID();
 
     let obj = {}
     //@ts-expect-error
@@ -30,8 +28,8 @@ function TypedRouter() {
                 type: "ROUTE",
                 method: "POST",
                 path: args[0],
-                inSchema,
-                outSchema
+                inSchema: ZodRepr(inSchema),
+                outSchema: ZodRepr(outSchema)
             })
             if (args.length >= 2) {
                 // Last argument should be the handler function
@@ -61,15 +59,34 @@ function TypedRouter() {
         }
     }
     obj["__meta__"] = {
-        id: id,
         type: "TYPED_ROUTER",
         routes: routes,
-        innerRouter: router
+        innerRouter: router,
+        route_prefix: ""
     }
     return obj;
 }
 
+
+function flattenRoutes(route, prefix) {
+    if (route.type === "ROUTE") {
+        return [{
+            method: route.method,
+            path: prefix + route.path,
+            inSchema: route.inSchema,
+            outSchema: route.outSchema,
+        }]
+    }
+    if (route.type === "ROUTER") {
+        return route.router.__meta__.routes.flatMap((r) => flattenRoutes(r, prefix + route.path))
+    }
+}
+
+
 const ROOT_ROUTER = TypedRouter();
+const SUB_ROUTER = TypedRouter();
+
+
 
 
 const inSchema = z.object({
@@ -84,9 +101,31 @@ ROOT_ROUTER.post(inSchema, outSchema, "/", (req) => {
     return "Hello world";
 })
 
+ROOT_ROUTER.use("/sub", SUB_ROUTER)
+
+SUB_ROUTER.post(z.any(), z.any(), "/route_a", (req) => {
+    return "ROUTE_A"
+})
+SUB_ROUTER.post(z.any(), z.any(), "/route_b", (req) => {
+    return "ROUTE_B"
+})
+
+
+const SUB_SUB_ROUTER = TypedRouter();
+SUB_SUB_ROUTER.post(z.string(), z.any(), "/hello", (req) => {
+    return "HELLO"
+})
+
+SUB_ROUTER.use("/abcd/efgh", SUB_SUB_ROUTER)
+
 const app = express();
 
 app.use("/", ROOT_ROUTER.__meta__.innerRouter)
 
+
+
 app.listen(3000, "0.0.0.0")
-console.log(ROOT_ROUTER.__meta__.routes)
+// console.log(ROOT_ROUTER.__meta__.routes)
+console.log(ROOT_ROUTER.__meta__.routes.map((r) => {
+    return flattenRoutes(r, "")
+}).flat())
