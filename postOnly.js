@@ -2,7 +2,7 @@ import { Router } from "express";
 import z from "zod"
 import express from "express"
 import { ZodRepr } from "./reflection";
-
+import cors from 'cors'
 function TypedRouter() {
 
     let obj = {}
@@ -119,13 +119,15 @@ SUB_SUB_ROUTER.post(z.string(), z.any(), "/hello", (req) => {
 SUB_ROUTER.use("/abcd/efgh", SUB_SUB_ROUTER)
 
 const app = express();
-
+app.use(cors({
+    origin: "*"
+}))
 app.use("/", ROOT_ROUTER.__meta__.innerRouter)
 
-
+app.get("/routes", (req, res) => {
+    res.json(ROOT_ROUTER.__meta__.routes.map((r) => {
+        return flattenRoutes(r, "")
+    }).flat())
+})
 
 app.listen(3000, "0.0.0.0")
-// console.log(ROOT_ROUTER.__meta__.routes)
-console.log(ROOT_ROUTER.__meta__.routes.map((r) => {
-    return flattenRoutes(r, "")
-}).flat())
