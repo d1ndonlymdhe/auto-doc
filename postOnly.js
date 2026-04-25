@@ -9,7 +9,7 @@ function TypedRouter() {
     //@ts-expect-error
     obj = () => { }
     const router = Router();
-    router.post
+
     const proto = Object.getPrototypeOf(Object.getPrototypeOf(router))
     const routes = []
 
@@ -129,5 +129,21 @@ app.get("/routes", (req, res) => {
         return flattenRoutes(r, "")
     }).flat())
 })
+
+function ResponseSchema(
+    status,
+    headers,
+    data
+) {
+    return {
+        status,
+        headers,
+        data
+    }
+}
+
+
+console.log(ResponseSchema(200, [], data))
+
 
 app.listen(3000, "0.0.0.0")

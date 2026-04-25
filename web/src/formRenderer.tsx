@@ -45,6 +45,7 @@ export function ArrayField({ name, value, setValue, repr }: {
     setValue: (value: unknown[]) => void,
     repr: ArrayRepr
 }) {
+    const elementType = repr.element_type;
     const [adding, setAdding] = useState(false)
 
 
@@ -58,11 +59,7 @@ export function ArrayField({ name, value, setValue, repr }: {
     </div>
 }
 
-
-const x = [
-    <div>Hello</div>,
-    <p>What up!</p>
-]
+// function AddArrayField()
 
 export function ObjectField({ name, value, setValue, repr }: {
     name: string,
