@@ -1,310 +1,224 @@
 import { z } from 'zod'
 
-// function main() {
-
-//     let data = z.object({
-//         id: z.string(),
-//         isPrimary: z.boolean().optional(),
-//         names: z.number().array()
-//     })
-
-//     let schemaInner = z.object({
-//         id: z.string(),
-//         data: data.array()
-//     })
-
-//     let E = z.object({
-//         e: z.enum({
-//             a: 1,
-//             b: 2,
-//             c: "abcd"
-//         })
-//     })
-
-
-//     let schema = z.object({
-//         // un: z.union([E, schemaInner, data]),
-//         literal: z.literal("hello"),
-//         name: z.string().max(100).optional().nullable().default("NAME"),
-//         number: z.number().max(10).min(5),
-//         data: z.object({
-//             height: z.string(),
-//             addresses: schemaInner.array(),
-//             enumWrapper: z.object({
-//                 id: z.string(),
-//                 value: E.optional()
-//             })
-//         }).optional().default({
-//             height: "1",
-//             addresses: [],
-//             enumWrapper: {
-//                 id: "z",
-//             }
-//         }),
-//         record_example: z.record(z.string(), data.optional()),
-//         everything: z.any().optional()
-//     })
-
-//     console.log(JSON.stringify(ZodRepr(schema)))
-// }
-
-
-type StringRepr = "string"
-
-function StringRepr(): StringRepr {
-    return "string"
+type BaseRepr = {
+    description?: string
 }
 
-type NumberRepr = "number"
-function NumberRepr(): NumberRepr {
-    return "number"
-}
+type StringRepr = {
+    repr: "string"
+} & BaseRepr
+
+type NumberRepr = {
+    repr: "number"
+} & BaseRepr
+
 type ArrayRepr = {
     repr: "array"
     element_type: Repr
-}
-function ArrayRepr(element_type: Repr): ArrayRepr {
-    return { repr: "array", element_type }
-}
-type BoolRepr = "boolean"
-function BoolRepr(): BoolRepr {
-    return "boolean"
-}
+} & BaseRepr
+
+type BoolRepr = {
+    repr: "boolean"
+} & BaseRepr
+
 type ObjectRepr = {
-    repr: "object",
+    repr: "object"
     properties: Record<string, Repr>
-}
-function ObjectRepr(properties: Record<string, Repr>): ObjectRepr {
-    return { repr: "object", properties }
-}
+} & BaseRepr
+
 type NullableRepr = {
-    repr: "nullable",
+    repr: "nullable"
     element_type: Repr
-}
-function NullableRepr(element_type: Repr): NullableRepr {
-    return { repr: "nullable", element_type }
-}
+} & BaseRepr
+
 type OptionalRepr = {
-    repr: "optional",
+    repr: "optional"
     element_type: Repr
-}
-function OptionalRepr(element_type: Repr): OptionalRepr {
-    return { repr: "optional", element_type }
-}
+} & BaseRepr
+
 type EnumRepr = {
-    repr: "enum",
+    repr: "enum"
     values: boolean[] | number[] | string[]
-}
-function EnumRepr(values: boolean[] | number[] | string[]): EnumRepr {
-    return { repr: "enum", values }
-}
+} & BaseRepr
+
 type DefaultRepr = {
-    repr: "default",
+    repr: "default"
     element_type: Repr
     value: unknown
-}
-function DefaultRepr(element_type: Repr, value: unknown): DefaultRepr {
-    return { repr: "default", element_type, value }
-}
+} & BaseRepr
+
 type RecordRepr = {
     repr: "record"
-    key_type: "string",
+    key_type: "string"
     value_type: Repr
-}
-function RecordRepr(value_type: Repr): RecordRepr {
-    return { repr: "record", key_type: "string", value_type }
-}
+} & BaseRepr
 
-type AnyRepr = "any"
-function AnyRepr(): AnyRepr {
-    return "any"
-}
+type AnyRepr = {
+    repr: "any"
+} & BaseRepr
 
-type UnknownRepr = "unknown"
-function UnknownRepr(): UnknownRepr {
-    return "unknown"
-}
-type NumberLiteralRepr = number[]
-function NumberLiteralRepr(values: number[]): NumberLiteralRepr {
-    return values
-}
-type StringLiteralRepr = string[]
-function StringLiteralRepr(values: string[]): StringLiteralRepr {
-    return values
-}
-type BoolLiteralRepr = boolean[]
-function BoolLiteralRepr(values: boolean[]): BoolLiteralRepr {
-    return values
-}
-type NullRepr = "null"
-function NullRepr(): NullRepr {
-    return "null"
-}
+type UnknownRepr = {
+    repr: "unknown"
+} & BaseRepr
+
+type LiteralRepr = {
+    repr: "literal"
+    values: boolean[] | number[] | string[]
+} & BaseRepr
+
+type NullRepr = {
+    repr: "null"
+} & BaseRepr
+
 type UnionRepr = {
-    repr: "union",
+    repr: "union"
     options: Repr[]
-}
-function UnionRepr(options: Repr[]): UnionRepr {
-    return { repr: "union", options }
+} & BaseRepr
+
+type Repr =
+    | StringRepr
+    | NumberRepr
+    | ArrayRepr
+    | BoolRepr
+    | ObjectRepr
+    | NullableRepr
+    | OptionalRepr
+    | EnumRepr
+    | DefaultRepr
+    | AnyRepr
+    | UnknownRepr
+    | RecordRepr
+    | LiteralRepr
+    | NullRepr
+    | UnionRepr
+
+function StringRepr(description?: string): StringRepr {
+    return {
+        repr: "string",
+        description
+    }
 }
 
-type Repr = StringRepr | NumberRepr | ArrayRepr | BoolRepr | ObjectRepr | NullableRepr | OptionalRepr | EnumRepr | DefaultRepr | AnyRepr | UnknownRepr | RecordRepr | NumberLiteralRepr | StringLiteralRepr | BoolLiteralRepr | NullRepr | UnionRepr
+function NumberRepr(description?: string): NumberRepr {
+    return {
+        repr: "number",
+        description
+    }
+}
+
+function ArrayRepr(element_type: Repr, description?: string): ArrayRepr {
+    return { repr: "array", element_type, description }
+}
+
+function BoolRepr(description?: string): BoolRepr {
+    return { repr: "boolean", description }
+}
+
+function ObjectRepr(properties: Record<string, Repr>, description?: string): ObjectRepr {
+    return { repr: "object", properties, description }
+}
+
+function NullableRepr(element_type: Repr, description?: string): NullableRepr {
+    return { repr: "nullable", element_type, description }
+}
+
+function OptionalRepr(element_type: Repr, description?: string): OptionalRepr {
+    return { repr: "optional", element_type, description }
+}
+
+function EnumRepr(values: boolean[] | number[] | string[], description?: string): EnumRepr {
+    return { repr: "enum", values, description }
+}
+
+function DefaultRepr(element_type: Repr, value: unknown, description?: string): DefaultRepr {
+    return { repr: "default", element_type, value, description }
+}
+
+function RecordRepr(value_type: Repr, description?: string): RecordRepr {
+    return { repr: "record", key_type: "string", value_type, description }
+}
+
+function AnyRepr(description?: string): AnyRepr {
+    return { repr: "any", description }
+}
+
+function UnknownRepr(description?: string): UnknownRepr {
+    return { repr: "unknown", description }
+}
+
+function LiteralRepr(values: boolean[] | number[] | string[], description?: string): LiteralRepr {
+    return { repr: "literal", values, description }
+}
+
+function NullRepr(description?: string): NullRepr {
+    return { repr: "null", description }
+}
+
+function UnionRepr(options: Repr[], description?: string): UnionRepr {
+    return { repr: "union", options, description }
+}
 
 export function ZodRepr(schema: z.ZodType): Repr {
     const type = schema.def.type;
+    const description = schema.description;
     if (type === "object") {
-        let repr: ObjectRepr = ObjectRepr({});
-        const shape = schema.def.shape;
+        let repr: ObjectRepr = ObjectRepr({}, description);
+        const shape = (schema as z.ZodObject<any>).def.shape;
         for (const [key, value] of Object.entries(shape) as [string, z.ZodType][]) {
             repr.properties[key] = ZodRepr(value);
         }
         return repr;
     } else if (type === "array") {
-        return ArrayRepr(ZodRepr(schema.def.element))
+        return ArrayRepr(ZodRepr((schema as z.ZodArray<any>).def.element), description)
     } else if (type === "string") {
-        return StringRepr()
+        return StringRepr(description)
     } else if (type === "literal") {
-        let values = schema.def.values
+        let values = (schema as z.ZodLiteral<any>).def.values
         if (values.length === 0) {
             throw new Error("Literal schema must have at least one value")
         }
         if (typeof values[0] === "string") {
-            return StringLiteralRepr(values as string[])
+            return LiteralRepr(values as string[], description)
         } else if (typeof values[0] === "number") {
-            return NumberLiteralRepr(values as number[])
+            return LiteralRepr(values as number[], description)
         } else if (typeof values[0] === "boolean") {
-            return BoolLiteralRepr(values as boolean[])
+            return LiteralRepr(values as boolean[], description)
         } else {
             throw new Error("Unsupported literal type")
         }
     } else if (type === "default") {
-        const innerType = schema.def.innerType;
-        const defaultValue = schema.def.defaultValue;
-        return DefaultRepr(ZodRepr(innerType), defaultValue)
+        const innerType = (schema as z.ZodDefault<any>).def.innerType;
+        const defaultValue = (schema as z.ZodDefault<any>).def.defaultValue;
+        return DefaultRepr(ZodRepr(innerType), defaultValue, description)
     } else if (type === "unknown") {
-        return UnknownRepr()
+        return UnknownRepr(description)
     } else if (type === "any") {
-        return AnyRepr()
+        return AnyRepr(description)
     } else if (type === "enum") {
-        const values = Object.values(schema.def.entries);
-        return EnumRepr(values as boolean[] | number[] | string[])
+        const values = Object.values((schema as z.ZodEnum<any>).def.entries);
+        return EnumRepr(values as boolean[] | number[] | string[], description)
     } else if (type === "record") {
-        const keyType = schema.def.keyType as z.ZodType;
+        const keyType = (schema as z.ZodRecord<any>).def.keyType as z.ZodType;
         if (keyType.def.type !== "string") {
             throw new Error("Record key type must be a string")
         }
-        const valueType = schema.def.valueType as z.ZodType;
-        return RecordRepr(ZodRepr(valueType))
+        const valueType = (schema as z.ZodRecord<any>).def.valueType as z.ZodType;
+        return RecordRepr(ZodRepr(valueType), description)
     } else if (type === "null") {
-        return NullRepr()
+        return NullRepr(description)
     } else if (type === "union") {
-        return UnionRepr(schema.def.options.map(ZodRepr))
+        return UnionRepr((schema as z.ZodUnion<any>).def.options.map(ZodRepr), description)
     } else if (type === "nullable") {
-        const innerType = schema.def.innerType;
-        return NullableRepr(ZodRepr(innerType))
+        const innerType = (schema as z.ZodNullable<any>).def.innerType;
+        return NullableRepr(ZodRepr(innerType), description)
     } else if (type === "optional") {
-        return OptionalRepr(ZodRepr(schema.def.innerType))
+        return OptionalRepr(ZodRepr((schema as z.ZodOptional<any>).def.innerType), description)
     } else if (type === "number") {
-        return NumberRepr()
+        return NumberRepr(description)
     } else if (type === "boolean") {
-        return BoolRepr()
+        return BoolRepr(description)
     }
     else {
         throw new Error(`Unsupported schema type: ${type}`)
     }
 }
-
-// function ZodTraversal(
-//     schema: z.ZodType,
-//     name: string,
-//     tabs: number,
-//     isOptional: boolean,
-//     isNullable: boolean
-// ) {
-
-
-//     if (schema.def.type === "nullable") {
-//         const innerType = schema.def.innerType
-//         ZodTraversal(innerType, name, tabs, isOptional, true)
-//     }
-//     else if (schema.def.type === "optional") {
-//         const innerType = schema.def.innerType;
-//         ZodTraversal(innerType, name, tabs, true, isNullable)
-//     }
-//     else if (schema.def.type === "object") {
-//         print(tabs, name, ":object", isOptional, isNullable)
-
-//         const shape = schema.def.shape;
-//         for (const [key, value] of Object.entries(shape)) {
-//             ZodTraversal(value, key, tabs + 1, false, false)
-//         }
-//     }
-//     else if (schema.def.type === "record") {
-//         print(tabs, name, ":record", isOptional, isNullable)
-//         const keyType = schema.def.keyType;
-//         ZodTraversal(keyType, `key`, tabs, false, false)
-//         const valueType = schema.def.valueType;
-//         ZodTraversal(valueType, `value`, tabs, false, false)
-//     }
-//     else if (schema.def.type === "array") {
-//         const element = schema.def.element;
-//         print(tabs, name, ":array", isOptional, isNullable)
-//         ZodTraversal(element, `-`, tabs, false, false)
-//     }
-//     else if (schema.def.type === "string") {
-//         print(tabs, name, ":string", isOptional, isNullable)
-//     }
-//     else if (schema.def.type === "number") {
-//         print(tabs, name, ":number", isOptional, isNullable)
-//     }
-//     else if (schema.def.type === "boolean") {
-//         print(tabs, name, ":boolean", isOptional, isNullable)
-//     }
-//     else if (schema.def.type === "enum") {
-//         print(tabs, name, ":enum", isOptional, isNullable)
-//         let entries = Object.values(schema.def.entries)
-//         for (const entry of entries) {
-//             print(tabs, `- ${entry} ${typeof entry}`)
-//         }
-//     }
-//     else if (schema.def.type === "date") {
-//         throw new Error("Date is not supported, use string")
-//     } else if (schema.def.type === "any") {
-//         print(tabs, name, ":any", isOptional, isNullable)
-//     } else if (schema.def.type === "null") {
-//         print(tabs, name, ":null", isOptional, isNullable)
-//     } else if (schema.def.type === "union") {
-//         print(tabs, name, ":union", isOptional, isNullable)
-//         const options = schema.def.options
-//         for (const option of options) {
-//             ZodTraversal(option, `-`, tabs, false, false)
-//         }
-//     } else if (schema.def.type === "literal") {
-//         print(tabs, name, ":literal", isOptional, isNullable)
-//         for (const value of schema.def.values) {
-//             print(tabs, `- ${value} ${typeof value}`)
-//         }
-//     } else if (schema.def.type === "default") {
-//         // print("DEFAULT")
-//         const innerType = schema.def.innerType
-//         ZodTraversal(innerType, name, tabs, isOptional, isNullable)
-//         print(tabs, "DEFAULT", schema.def.defaultValue)
-//     } else if (schema.def.type === "unknown") {
-//         print(tabs, name, ":unknown", isOptional, isNullable)
-//     }
-// }
-
-
-// function print(tabs: number, ...args: any[]) {
-
-//     console.log(tabber(tabs), ...args)
-// }
-
-// function tabber(tabs: number) {
-//     let str = "";
-//     for (let i = 0; i < tabs; i++) {
-//         str += "    "
-//     }
-//     return str;
-// }
-

@@ -20,33 +20,33 @@ type DataResponse = {
     data: z.ZodType
 } & DescribedResponse
 
-export type Response = (StaticRedirectResponse | DynamicRedirectResponse | DataResponse)
+export type TypedResponse = (StaticRedirectResponse | DynamicRedirectResponse | DataResponse)
 
-export function StaticRedirectResponse(location: string, headers?: string[], description?: string): StaticRedirectResponse {
-    return {
+export function StaticRedirectResponse(location: string, headers?: string[], description?: string) {
+    return RepredResponse({
         type: "STATIC_REDIRECT",
         location,
         description,
         headers: headers || []
-    }
+    })
 }
 
-export function DynamicRedirectResponse(headers?: string[], description?: string): DynamicRedirectResponse {
-    return {
+export function DynamicRedirectResponse(headers?: string[], description?: string) {
+    return RepredResponse({
         type: "DYNAMIC_REDIRECT",
         description,
         headers: headers || []
-    }
+    })
 }
-export function DataResponse(data: z.ZodType, headers?: string[], description?: string): DataResponse {
-    return {
+export function DataResponse(data: z.ZodType, headers?: string[], description?: string) {
+    return RepredResponse({
         type: "DATA",
         data,
         description,
         headers: headers || []
-    }
+    })
 }
-export function RepredResponse(response: Response) {
+function RepredResponse(response: TypedResponse) {
     if (response.type === "DATA") {
         return {
             ...response,

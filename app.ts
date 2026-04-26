@@ -1,24 +1,16 @@
 import express from "express"
-import { flattenRoutes, TypedRouter } from "./lib/TypedRouter";
-import z from "zod";
-import { DataResponse, RepredResponse } from "./lib/ResponseTypes";
-
+import cors from "cors"
+import { flattenRoutes } from "./lib/TypedRouter";
+import rootRouter from "./routes/rootRoutes";
 
 const app = express();
-const rootRouter = TypedRouter()
-
-rootRouter.get(z.any(), RepredResponse(DataResponse(z.object({ message: z.string() }))), "/", [], async () => {
-    return { message: "Hello, World!" }
-})
-rootRouter.get(z.any(), RepredResponse(DataResponse(z.object({ message: z.string() }))), "/test", [], async () => {
-    return { message: "Test endpoint!" }
-})
+app.use(express.json())
+app.use(cors())
 
 app.use("/", rootRouter.router())
 app.get("/routes", (req, res) => {
-    let routes = rootRouter.__meta__.routes.map((route) => flattenRoutes(route, "")).flat()
+    const routes = rootRouter.__meta__.routes.map((route) => flattenRoutes(route, "")).flat()
     res.json(routes)
 })
-
 
 app.listen(3000)

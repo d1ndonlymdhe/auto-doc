@@ -1,6 +1,28 @@
-div {
-  border-color: black;
-  border-style: solid;
-  border-width: 2px;
-  padding: 5px;
+:root {
+  --surface-bg: #f6f7f4;
+  --surface-card: #ffffff;
+  --text-primary: #222327;
+  --accent: #0f766e;
+  --danger-bg: #fff1f1;
+  --danger-border: #efb3b3;
+}
+
+body {
+  margin: 0;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(15, 118, 110, 0.09), transparent 34%),
+    radial-gradient(circle at 88% 5%, rgba(165, 180, 252, 0.18), transparent 30%),
+    linear-gradient(180deg, #f5f7f2 0%, #f0f3ef 100%);
+  min-height: 100vh;
+}
+
+.hero {
+  background: linear-gradient(140deg, rgba(15, 118, 110, 0.1), rgba(255, 255, 255, 0.95));
+  border: 1px solid rgba(15, 118, 110, 0.2);
+}
+
+.errorPanel {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
 }

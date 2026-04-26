@@ -1,5 +1,4 @@
 import { Router, type NextFunction, type Response, type Request } from "express";
-import { ZodRepr } from "../reflection";
 import type { ReprResponse } from "./ResponseTypes";
 const methods = [
     "get",
@@ -8,7 +7,7 @@ const methods = [
     "post",
     "put",
 ] as const
-import z from "zod"
+import type { ReprRequest } from "./RequestTypes";
 
 
 type TypedRouter = (Omit<ReturnType<typeof Router>, typeof methods[number]> & {
@@ -21,22 +20,23 @@ type TypedRouter = (Omit<ReturnType<typeof Router>, typeof methods[number]> & {
     [K in typeof methods[number]]: TypedMethod
 } & {
     router: () => ReturnType<typeof Router>
+    subRoute: (path: string, router: TypedRouter) => void
 }
 
 type TypedRoute = {
     type: "ROUTE",
     method: string,
     path: string,
-    inSchema: any,
-    outSchema: ReprResponse
+    inSchema: ReprRequest[],
+    outSchema: ReprResponse[]
 } | {
     type: "ROUTER",
     path: string,
     router: TypedRouter
 }
 
-type Middleware = (req: Request, res: Response, next: NextFunction) => Promise<void>
-type TypedMethod = (inSchema: z.ZodType, responseType: ReprResponse, path: string, middlewares: Middleware[], handler: (req: any) => Promise<any>) => void
+type Middleware = (req: Request, res: Response, next?: NextFunction) => Promise<void>
+type TypedMethod = (requestType: ReprRequest | ReprRequest[], responseType: ReprResponse | ReprResponse[], path: string, ...routerArgs: Middleware[]) => void
 
 
 
@@ -45,42 +45,35 @@ export function TypedRouter() {
 
     // @ts-ignore
     let obj = (() => { }) as TypedRouter
-
     const proto = Object.getPrototypeOf(Object.getPrototypeOf(router))
     const routes = [] as TypedRoute[]
-
     for (const key of Object.keys(proto)) {
         //@ts-ignore
         if (methods.includes(key)) {
-            obj[(key) as typeof methods[number]] = (inSchema: z.ZodType, responseType: ReprResponse, path: string, middlewares: Middleware[], handler: (req: any) => Promise<any>) => {
+            obj[(key) as typeof methods[number]] = (requestType: ReprRequest | ReprRequest[], responseType: ReprResponse | ReprResponse[], path: string, ...routerArgs: Middleware[]) => {
                 routes.push({
                     type: "ROUTE",
                     method: key,
                     path: path,
-                    inSchema: ZodRepr(inSchema),
-                    outSchema: responseType
+                    inSchema: Array.isArray(requestType) ? requestType : [requestType],
+                    outSchema: Array.isArray(responseType) ? responseType : [responseType]
                 })
                 //@ts-ignore
-                router[key](path, ...middlewares, async (req, res) => {
-                    res.send(JSON.stringify(handler(req.body)))
-                })
+                router[key](path, ...routerArgs)
+            }
+        } else {
+            //@ts-ignore
+            obj[key] = (...args: any[]) => {
+                //@ts-ignore
+                router[key](...args)
             }
         }
     }
 
 
-    //@ts-ignore
-    obj["use"] = (...args) => {
-        const path = args[0];
-        if (typeof path === "string") {
-            const secondArgs = args[1];
-            if (secondArgs && typeof secondArgs === "function") {
-                if (secondArgs["__meta__"]["type"] === "TYPED_ROUTER") {
-                    routes.push({ type: "ROUTER", path: path, router: secondArgs })
-                }
-            }
-        }
-        router.use(...args)
+    obj["subRoute"] = (path: string, childRouter: TypedRouter) => {
+        routes.push({ type: "ROUTER", path: path, router: childRouter })
+        router.use(path, childRouter.router())
     }
 
     obj["__meta__"] = {
@@ -97,11 +90,13 @@ export function TypedRouter() {
 export function flattenRoutes(route: TypedRoute, prefix: string): {
     method: string,
     path: string,
-    inSchema: any,
-    outSchema: ReprResponse
+    inSchema: ReprRequest[],
+    outSchema: ReprResponse[]
 }[] {
     if (route.type === "ROUTE") {
-        return [route]
+        let { type, ...routeData } = route
+        routeData.path = `${prefix}${routeData.path}`
+        return [routeData]
     } else {
         return route.router.__meta__.routes.flatMap((r) => flattenRoutes(r, prefix + route.path))
     }
