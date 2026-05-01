@@ -1,21 +1,26 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Badge,
+  AppShell,
   Box,
   Button,
   Card,
-  Code,
+  Center,
   Container,
-  Divider,
+  Flex,
+  Grid,
+  GridCol,
   Group,
-  Loader,
-  Paper,
-  ScrollArea,
+  JsonInput,
+  Modal,
+  NumberInput,
   Stack,
+  Switch,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core'
 import './App.css'
+import { useDisclosure } from '@mantine/hooks'
 
 type HeaderField = {
   name: string
@@ -57,184 +62,98 @@ type RouteDoc = {
   inSchema: ReprRequest[]
   outSchema: ReprResponse[]
 }
-
-type ReprObject = {
-  repr: string
+type BaseRepr = {
   description?: string
-  [key: string]: unknown
 }
 
-type Repr = ReprObject | string[] | number[] | boolean[] | string
+type StringRepr = {
+  repr: "string"
+} & BaseRepr
 
-const methodColor: Record<string, string> = {
-  get: 'teal',
-  post: 'blue',
-  put: 'orange',
-  patch: 'grape',
-  delete: 'red',
-}
+type NumberRepr = {
+  repr: "number"
+} & BaseRepr
 
-function isReprObject(value: Repr | undefined): value is ReprObject {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && 'repr' in value)
-}
+type ArrayRepr = {
+  repr: "array"
+  element_type: Repr
+} & BaseRepr
 
-function descriptionPrefix(description?: string) {
-  return description ? `(${description}) ` : ''
-}
+type BoolRepr = {
+  repr: "boolean"
+} & BaseRepr
 
-function primitiveToken(name: string) {
-  return `<${name}>`
-}
+type ObjectRepr = {
+  repr: "object"
+  properties: Record<string, Repr>
+} & BaseRepr
 
-function renderHeaderList(title: string, rows: HeaderField[]) {
-  if (rows.length === 0) {
-    return (
-      <Box>
-        <Text fw={600} size="sm">{title}</Text>
-        <Text c="dimmed" size="sm">None</Text>
-      </Box>
-    )
-  }
+type NullableRepr = {
+  repr: "nullable"
+  element_type: Repr
+} & BaseRepr
 
-  return (
-    <Box>
-      <Text fw={600} size="sm">{title}</Text>
-      <Stack gap={4} mt={4}>
-        {rows.map((row) => (
-          <Text key={`${title}-${row.name}`} size="sm">
-            <strong>{row.name}</strong>
-            {row.description ? ` - ${row.description}` : ''}
-          </Text>
-        ))}
-      </Stack>
-    </Box>
-  )
-}
+type OptionalRepr = {
+  repr: "optional"
+  element_type: Repr
+} & BaseRepr
 
-function SchemaTree({ schema, level = 0 }: { schema: Repr; level?: number }) {
-  if (Array.isArray(schema)) {
-    const inferredType = schema.length > 0 ? typeof schema[0] : 'value'
-    return <Code block>{`[${primitiveToken(inferredType)}]... ${JSON.stringify(schema)}`}</Code>
-  }
+type EnumRepr = {
+  repr: "enum"
+  values: boolean[] | number[] | string[]
+} & BaseRepr
 
-  if (typeof schema === 'string') {
-    return <Code>{primitiveToken(schema)}</Code>
-  }
+type DefaultRepr = {
+  repr: "default"
+  element_type: Repr
+  value: unknown
+} & BaseRepr
 
-  if (!isReprObject(schema)) {
-    return <Code>{String(schema)}</Code>
-  }
+type RecordRepr = {
+  repr: "record"
+  key_type: "string"
+  value_type: Repr
+} & BaseRepr
 
-  const indentStyle = { marginLeft: level * 14, marginTop: 4 }
-  const labelPrefix = descriptionPrefix(schema.description)
+type AnyRepr = {
+  repr: "any"
+} & BaseRepr
 
-  switch (schema.repr) {
-    case 'object': {
-      const properties = (schema.properties as Record<string, Repr>) || {}
-      const keys = Object.keys(properties)
-      return (
-        <Box style={indentStyle}>
-          <details open={level < 1}>
-            <summary>
-              <Code>{`${labelPrefix}{ key: value }`}</Code>
-            </summary>
-            <Stack gap={6} mt={6}>
-              {keys.length === 0 ? <Text size="sm" c="dimmed">{`{}`}</Text> : null}
-              {keys.map((key) => (
-                <Box key={`${level}-${key}`}>
-                  <Text size="sm" fw={600}>{`${key}:`}</Text>
-                  <SchemaTree schema={properties[key]} level={level + 1} />
-                </Box>
-              ))}
-            </Stack>
-          </details>
-        </Box>
-      )
-    }
-    case 'array': {
-      const element = schema.element_type as Repr
-      const elementLabel = isReprObject(element) ? primitiveToken(element.repr) : '<element_type>'
-      return (
-        <Box style={indentStyle}>
-          <details open={level < 1}>
-            <summary>
-              <Code>{`${labelPrefix}[ ${elementLabel} ]`}</Code>
-            </summary>
-            <Box mt={6}>
-              <SchemaTree schema={element} level={level + 1} />
-            </Box>
-          </details>
-        </Box>
-      )
-    }
-    case 'union': {
-      const options = (schema.options as Repr[]) || []
-      return (
-        <Box style={indentStyle}>
-          <details open={level < 1}>
-            <summary>
-              <Code>{`${labelPrefix}[<union>]...`}</Code>
-            </summary>
-            <Stack gap={6} mt={6}>
-              {options.map((option, index) => (
-                <Box key={`union-${level}-${index}`}>
-                  <Text size="xs" c="dimmed">Option {index + 1}</Text>
-                  <SchemaTree schema={option} level={level + 1} />
-                </Box>
-              ))}
-            </Stack>
-          </details>
-        </Box>
-      )
-    }
-    case 'enum':
-    case 'literal':
-      return <Code block>{`${labelPrefix}[${primitiveToken(typeof ((schema.values as unknown[])[0] ?? 'string'))}]... ${JSON.stringify(schema.values)}`}</Code>
-    case 'nullable':
-    case 'optional':
-      return (
-        <Box style={indentStyle}>
-          <details open={level < 1}>
-            <summary>
-              <Code>{`${labelPrefix}${schema.repr}`}</Code>
-            </summary>
-            <Box mt={6}>
-              <SchemaTree schema={schema.element_type as Repr} level={level + 1} />
-            </Box>
-          </details>
-        </Box>
-      )
-    case 'default':
-      return (
-        <Box style={indentStyle}>
-          <details open={level < 1}>
-            <summary>
-              <Code>{`${labelPrefix}default`}</Code>
-            </summary>
-            <Code block mt={6}>{JSON.stringify(schema.value, null, 2)}</Code>
-            <Box mt={6}>
-              <SchemaTree schema={schema.element_type as Repr} level={level + 1} />
-            </Box>
-          </details>
-        </Box>
-      )
-    case 'record':
-      return (
-        <Box style={indentStyle}>
-          <details open={level < 1}>
-            <summary>
-              <Code>{`${labelPrefix}{ [${String(schema.key_type)}]: value }`}</Code>
-            </summary>
-            <Box mt={6}>
-              <SchemaTree schema={schema.value_type as Repr} level={level + 1} />
-            </Box>
-          </details>
-        </Box>
-      )
-    default:
-      return <Code>{`${labelPrefix}${primitiveToken(schema.repr)}`}</Code>
-  }
-}
+type UnknownRepr = {
+  repr: "unknown"
+} & BaseRepr
+
+type LiteralRepr = {
+  repr: "literal"
+  values: boolean[] | number[] | string[]
+} & BaseRepr
+
+type NullRepr = {
+  repr: "null"
+} & BaseRepr
+
+type UnionRepr = {
+  repr: "union"
+  options: Repr[]
+} & BaseRepr
+
+type Repr =
+  | StringRepr
+  | NumberRepr
+  | ArrayRepr
+  | BoolRepr
+  | ObjectRepr
+  | NullableRepr
+  | OptionalRepr
+  | EnumRepr
+  | DefaultRepr
+  | AnyRepr
+  | UnknownRepr
+  | RecordRepr
+  | LiteralRepr
+  | NullRepr
+  | UnionRepr
+
 
 function App() {
   const [routes, setRoutes] = useState<RouteDoc[]>([])
@@ -260,7 +179,7 @@ function App() {
   }
 
   useEffect(() => {
-    void fetchRoutes()
+    fetchRoutes()
   }, [])
 
   const sortedRoutes = useMemo(() => {
@@ -273,123 +192,254 @@ function App() {
     })
   }, [routes])
 
+  return <AppShell
+    header={{
+      height: 56,
+    }}
+    padding="md"
+  >
+    <AppShell.Header>
+      <Center h="100%" px="md">
+        <Title>
+          API DOCS
+        </Title>
+      </Center>
+    </AppShell.Header>
+    <AppShell.Main>
+      <Container py="md" px="xs" size="lg">
+        <Stack gap="md">
+          {
+            sortedRoutes.map((RouteDoc, idx) => {
+              return <RouteDocRender key={idx} routeDoc={RouteDoc} />
+            })
+          }
+        </Stack>
+      </Container>
+    </AppShell.Main>
+  </AppShell>
+}
+
+function RouteDocRender({ routeDoc }: { routeDoc: RouteDoc }) {
   return (
-    <Container size="lg" py="xl">
-      <Stack gap="lg">
-        <Paper className="hero" radius="xl" p="xl">
-          <Group justify="space-between" align="flex-start">
-            <Box>
-              <Text size="xs" fw={700} tt="uppercase" c="dimmed">Contract Explorer</Text>
-              <Title order={1}>API Documentation</Title>
-              <Text c="dimmed" mt={4}>Source: http://localhost:3000/routes</Text>
-            </Box>
-            <Button onClick={() => void fetchRoutes()} variant="light">Refresh</Button>
-          </Group>
-        </Paper>
-
-        {loading ? (
-          <Paper p="xl" radius="md">
-            <Group justify="center">
-              <Loader />
-              <Text>Loading route metadata...</Text>
-            </Group>
-          </Paper>
-        ) : null}
-
-        {error ? (
-          <Paper p="xl" radius="md" className="errorPanel">
-            <Title order={3}>Unable to load docs</Title>
-            <Text mt={6}>{error}</Text>
-            <Text c="dimmed" size="sm" mt={6}>Ensure the backend is running on localhost:3000 and CORS is enabled.</Text>
-          </Paper>
-        ) : null}
-
-        {!loading && !error && sortedRoutes.length === 0 ? (
-          <Paper p="xl" radius="md">
-            <Text>No routes found in metadata.</Text>
-          </Paper>
-        ) : null}
-
-        {!loading && !error ? (
-          <Stack gap="md">
-            {sortedRoutes.map((route, routeIndex) => (
-              <Card key={`${route.method}-${route.path}-${routeIndex}`} radius="lg" withBorder>
-                <Group justify="space-between" align="center">
-                  <Group gap="sm">
-                    <Badge color={methodColor[route.method] || 'gray'} variant="filled">{route.method.toUpperCase()}</Badge>
-                    <Code>{route.path}</Code>
-                  </Group>
-                  <Text size="sm" c="dimmed">
-                    {route.inSchema.length} request variant(s), {route.outSchema.length} response variant(s)
+    <Card key={`${routeDoc.method}-${routeDoc.path}`} shadow="sm" p="md" withBorder radius="md">
+      <Title order={3} mb="md">{routeDoc.method.toUpperCase()} {routeDoc.path}</Title>
+      <Grid>
+        <Grid.Col>
+          <Container px={0}>
+            <Title
+              order={4}
+              mb="sm"
+            >
+              Input Schema
+            </Title>
+            <Stack gap="sm">
+              <NamedDescription title="Headers" items={routeDoc.inSchema[0]?.headers || []} />
+              <NamedDescription title="Query Parameters" items={routeDoc.inSchema[0].query} />
+              <NamedDescription title="Path Parameters" items={routeDoc.inSchema[0].params} />
+              <Card withBorder p="md" radius="md">
+                <Stack gap="xs">
+                  <Text>
+                    Body
                   </Text>
-                </Group>
-
-                <Divider my="md" />
-
-                <Group align="flex-start" grow>
-                  <Stack gap="sm">
-                    <Title order={4}>Request</Title>
-                    {route.inSchema.map((requestSchema, requestIndex) => (
-                      <Paper key={`in-${routeIndex}-${requestIndex}`} p="sm" withBorder radius="md">
-                        <Text fw={700} size="sm">Variant {requestIndex + 1}</Text>
-                        <Stack gap="xs" mt={8}>
-                          {renderHeaderList('Headers', requestSchema.headers)}
-                          {renderHeaderList('Params', requestSchema.params)}
-                          {renderHeaderList('Query', requestSchema.query)}
-                          <Box>
-                            <Text fw={600} size="sm">Body</Text>
-                            {requestSchema.body ? (
-                              <ScrollArea.Autosize mah={260} mt={4}>
-                                <SchemaTree schema={requestSchema.body} />
-                              </ScrollArea.Autosize>
-                            ) : (
-                              <Text c="dimmed" size="sm">None</Text>
-                            )}
-                          </Box>
-                        </Stack>
-                      </Paper>
-                    ))}
-                  </Stack>
-
-                  <Stack gap="sm">
-                    <Title order={4}>Response</Title>
-                    {route.outSchema.map((responseSchema, responseIndex) => (
-                      <Paper key={`out-${routeIndex}-${responseIndex}`} p="sm" withBorder radius="md">
-                        <Text fw={700} size="sm">Variant {responseIndex + 1}</Text>
-                        <Text size="sm" mt={6}><strong>Type:</strong> {responseSchema.type}</Text>
-                        {responseSchema.description ? (
-                          <Text size="sm"><strong>Description:</strong> {responseSchema.description}</Text>
-                        ) : null}
-
-                        {responseSchema.headers.length > 0 ? (
-                          <Text size="sm"><strong>Headers:</strong> {responseSchema.headers.join(', ')}</Text>
-                        ) : (
-                          <Text size="sm" c="dimmed">Headers: none</Text>
-                        )}
-
-                        {responseSchema.type === 'STATIC_REDIRECT' ? (
-                          <Text size="sm"><strong>Location:</strong> {responseSchema.location}</Text>
-                        ) : null}
-
-                        {responseSchema.type === 'DATA' ? (
-                          <Box mt={8}>
-                            <Text fw={600} size="sm">Body schema</Text>
-                            <ScrollArea.Autosize mah={260} mt={4}>
-                              <SchemaTree schema={responseSchema.data} />
-                            </ScrollArea.Autosize>
-                          </Box>
-                        ) : null}
-                      </Paper>
-                    ))}
-                  </Stack>
-                </Group>
+                  <Text>
+                    ARRAY TEST
+                  </Text>
+                  <Array name='abcd' repr={{
+                    repr: "string",
+                  }}></Array>
+                </Stack>
               </Card>
-            ))}
-          </Stack>
-        ) : null}
-      </Stack>
-    </Container>
+            </Stack>
+          </Container>
+        </Grid.Col>
+      </Grid>
+    </Card>
   )
 }
+
+function HeaderRender({ header }: {
+  header: ReprRequest["headers"][number]
+}) {
+  return <Card withBorder p="md" radius="md">
+    <Stack gap="xs">
+      <Text fw={600} size="sm" lh={1.3}>
+        {header.name}
+      </Text>
+      <Text c="dimmed" size="xs" lh={1.5}>
+        {header.description || "No description"}
+      </Text>
+      <TextInput mt={2}></TextInput>
+    </Stack>
+  </Card>
+}
+
+function NamedDescription({ items: headers, title }: { items: HeaderField[], title: string }) {
+  return (
+    <Card withBorder p="md" radius="md">
+      <Stack gap="sm">
+        <Title order={5}>
+          {title}
+        </Title>
+        {
+          headers.length === 0 && (
+            <Text c="dimmed" size="sm">
+              No headers
+            </Text>
+          )
+        }
+        {headers.map((header, index) => (
+          <HeaderRender key={index} header={header} />
+        ))}
+      </Stack>
+    </Card>
+  )
+}
+
+function String({
+  name,
+  val,
+  setVal
+}: {
+  name: string,
+  val: string,
+  setVal: (val: string) => void
+}) {
+  return <TextInput label={name} value={val} onChange={(e) => setVal(e.currentTarget.value)} />
+}
+
+function Number({
+  name,
+  val,
+  setVal
+}: {
+  name: string,
+  val: string,
+  setVal: (val: number) => void
+}) {
+  return <NumberInput label={name} value={val} onChange={setVal} />
+}
+
+function Bool({
+  name,
+  val,
+  setVal
+}: {
+  name: string,
+  val: boolean,
+  setVal: (val: boolean) => void
+}) {
+  return <Switch label={name} checked={val} onChange={(e) => setVal(e.currentTarget.checked)} />
+}
+
+function ReprEditorFactory(
+  {
+    name,
+    val,
+    setVal,
+    repr
+  }: {
+    name: string,
+    val: any,
+    setVal: (val: any) => void,
+    repr: Repr
+  }
+) {
+  if (repr.repr === "string") {
+    return <String
+      name={name}
+      val={val || ""}
+      setVal={setVal}
+    ></String>
+  }
+  if (repr.repr === "number") {
+    return <Number
+      name={name}
+      val={val || ""}
+      setVal={setVal}
+    ></Number>
+  }
+  if (repr.repr === "boolean") {
+    return <Bool
+      name={name}
+      val={val || false}
+      setVal={setVal}
+    ></Bool>
+  }
+  if (repr.repr === "array") {
+    return <Array
+      name={name}
+      repr={repr}
+    ></Array>
+  }
+}
+
+
+function Array({
+  name,
+  repr
+}: {
+  name: string,
+  repr: Repr
+}) {
+  const [items, setItems] = useState<any[]>([])
+  const [opened, { open, close: _close }] = useDisclosure(false);
+
+
+  const [val, setVal] = useState<any>()
+
+
+  const close = () => {
+    setVal(undefined)
+    _close()
+  }
+
+  const saveAndClose = useCallback(() => {
+    setItems([...items, val])
+    setVal(undefined)
+    _close()
+  }, [val, items])
+
+
+  return <Card withBorder p="md" radius="md">
+    <Text size='lg' mb="xs">
+      {name}
+    </Text>
+    <Stack gap="sm">
+      {
+        items.map((item, index) => {
+          return <Group key={`${name}-${index}`} align="end" gap="sm">
+            <ReprEditorFactory
+              name={`Item ${index + 1}`}
+              val={item}
+              setVal={(newVal) => {
+                const newItems = [...items]
+                newItems[index] = newVal
+                setItems(newItems)
+              }}
+              repr={repr}
+            />
+            <Button
+              onClick={() => {
+                const newItems = [...items]
+                newItems.splice(index, 1)
+                setItems(newItems)
+              }}
+            >
+              DEL
+            </Button>
+          </Group>
+        })
+      }
+    </Stack>
+    <Button onClick={open} mt="sm">Add Item</Button>
+    <Modal opened={opened} onClose={close}>
+      <ReprEditorFactory name={`Item ${items.length + 1}`} val={val} setVal={setVal} repr={repr} />
+      <Button onClick={saveAndClose} mt="sm">Add</Button>
+    </Modal>
+  </Card>
+}
+
+
+
 
 export default App
