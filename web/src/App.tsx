@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  Accordion,
   AppShell,
   Box,
   Button,
@@ -13,6 +14,7 @@ import {
   JsonInput,
   Modal,
   NumberInput,
+  Select,
   Stack,
   Switch,
   Text,
@@ -21,6 +23,8 @@ import {
 } from '@mantine/core'
 import './App.css'
 import { useDisclosure } from '@mantine/hooks'
+import z from 'zod'
+import { ZodRepr, type Repr } from './reflection'
 
 type HeaderField = {
   name: string
@@ -62,103 +66,120 @@ type RouteDoc = {
   inSchema: ReprRequest[]
   outSchema: ReprResponse[]
 }
-type BaseRepr = {
-  description?: string
-}
 
-type StringRepr = {
-  repr: "string"
-} & BaseRepr
 
-type NumberRepr = {
-  repr: "number"
-} & BaseRepr
+const StatusEnum = z.enum(["active", "inactive", "pending"]);
 
-type ArrayRepr = {
-  repr: "array"
-  element_type: Repr
-} & BaseRepr
+const RoleEnum = z.enum(["admin", "user", "guest"]);
 
-type BoolRepr = {
-  repr: "boolean"
-} & BaseRepr
+const DeepSchema = z.object({
+  id: z.string().uuid(),
+  createdAt: z.string().datetime(),
 
-type ObjectRepr = {
-  repr: "object"
-  properties: Record<string, Repr>
-} & BaseRepr
+  profile: z.object({
+    name: z.object({
+      first: z.string().min(1),
+      middle: z.string().optional(),
+      last: z.string().min(1),
+    }),
 
-type NullableRepr = {
-  repr: "nullable"
-  element_type: Repr
-} & BaseRepr
+    age: z.number().int().min(0).max(120),
 
-type OptionalRepr = {
-  repr: "optional"
-  element_type: Repr
-} & BaseRepr
+    contact: z.object({
+      email: z.string().email(),
+      phone: z.string().nullable(),
+    }),
 
-type EnumRepr = {
-  repr: "enum"
-  values: boolean[] | number[] | string[]
-} & BaseRepr
+    status: StatusEnum,
+    role: RoleEnum,
 
-type DefaultRepr = {
-  repr: "default"
-  element_type: Repr
-  value: unknown
-} & BaseRepr
+    preferences: z.object({
+      theme: z.enum(["light", "dark"]).default("light"),
+      notifications: z.object({
+        email: z.boolean(),
+        sms: z.boolean().optional(),
+        push: z.boolean().nullable(),
+      }),
+      record: z.record(z.string(), z.object({
+        theme: z.enum(["light", "dark"]).default("light"),
+        notifications: z.object({
+          email: z.boolean(),
+          sms: z.boolean().optional(),
+          push: z.boolean().nullable(),
+        }),
+      }))
+    }),
+  }),
 
-type RecordRepr = {
-  repr: "record"
-  key_type: "string"
-  value_type: Repr
-} & BaseRepr
+  metadata: z.object({
+    version: z.literal(1),
+    tags: z.array(z.string()).optional(),
+    notes: z.string().nullable(),
 
-type AnyRepr = {
-  repr: "any"
-} & BaseRepr
+    audit: z.object({
+      createdBy: z.string(),
+      updatedBy: z.string().nullable(),
+      flags: z.array(
+        z.object({
+          type: z.enum(["warning", "error", "info"]),
+          message: z.string(),
+          code: z.union([
+            z.literal("W001"),
+            z.literal("E001"),
+            z.number(),
+          ]),
+        })
+      ).optional(),
+    }),
+  }),
 
-type UnknownRepr = {
-  repr: "unknown"
-} & BaseRepr
+  settings: z.object({
+    privacy: z.object({
+      visibility: z.enum(["public", "private", "friends"]),
+      searchable: z.boolean().optional(),
+    }).default({
+      visibility: "private",
+      searchable: false
+    }),
 
-type LiteralRepr = {
-  repr: "literal"
-  values: boolean[] | number[] | string[]
-} & BaseRepr
+    features: z.object({
+      beta: z.boolean(),
+      experiments: z.array(
+        z.object({
+          key: z.string(),
+          enabled: z.boolean(),
+          rollout: z.number().min(0).max(100).nullable(),
+        })
+      ).optional(),
+    }).nullable(),
+  }),
 
-type NullRepr = {
-  repr: "null"
-} & BaseRepr
-
-type UnionRepr = {
-  repr: "union"
-  options: Repr[]
-} & BaseRepr
-
-type Repr =
-  | StringRepr
-  | NumberRepr
-  | ArrayRepr
-  | BoolRepr
-  | ObjectRepr
-  | NullableRepr
-  | OptionalRepr
-  | EnumRepr
-  | DefaultRepr
-  | AnyRepr
-  | UnknownRepr
-  | RecordRepr
-  | LiteralRepr
-  | NullRepr
-  | UnionRepr
+  // deeply nested union + optional + nullable combo
+  extra: z.union([
+    z.object({
+      type: z.literal("A"),
+      value: z.string(),
+    }),
+    z.object({
+      type: z.literal("B"),
+      value: z.number(),
+    }),
+    z.object({
+      type: z.literal("C"),
+      value: z.object({
+        nested: z.string().nullable().optional(),
+      }),
+    }),
+  ]).optional().nullable(),
+});
 
 
 function App() {
   const [routes, setRoutes] = useState<RouteDoc[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const repr = ZodRepr(DeepSchema);
 
   async function fetchRoutes() {
     setLoading(true)
@@ -220,40 +241,159 @@ function App() {
 }
 
 function RouteDocRender({ routeDoc }: { routeDoc: RouteDoc }) {
+
+  const [inputVariant, setInputVariant] = useState(0)
+  const [outputVariant, setOutputVariant] = useState(0)
+
+  const defaultOpenAccordionsIn = useMemo(() => {
+    let items = [] as string[];
+    const schema = routeDoc.inSchema[inputVariant];
+    if (schema.headers?.length > 0) {
+      items.push('Headers')
+    }
+    if (schema.params.length > 0) {
+      items.push('Path Parameters')
+    }
+    if (schema.query.length > 0) {
+      items.push('Query Parameters')
+    }
+    return items;
+  }, [inputVariant])
+  const inSchema = useMemo(() => {
+    return routeDoc.inSchema[inputVariant]
+  }, [inputVariant])
+  const outSchema = useMemo(() => {
+    return routeDoc.outSchema[outputVariant]
+  }, [outputVariant])
   return (
-    <Card key={`${routeDoc.method}-${routeDoc.path}`} shadow="sm" p="md" withBorder radius="md">
-      <Title order={3} mb="md">{routeDoc.method.toUpperCase()} {routeDoc.path}</Title>
-      <Grid>
-        <Grid.Col>
-          <Container px={0}>
-            <Title
-              order={4}
-              mb="sm"
-            >
-              Input Schema
-            </Title>
-            <Stack gap="sm">
-              <NamedDescription title="Headers" items={routeDoc.inSchema[0]?.headers || []} />
-              <NamedDescription title="Query Parameters" items={routeDoc.inSchema[0].query} />
-              <NamedDescription title="Path Parameters" items={routeDoc.inSchema[0].params} />
-              <Card withBorder p="md" radius="md">
-                <Stack gap="xs">
-                  <Text>
-                    Body
-                  </Text>
-                  <Text>
-                    ARRAY TEST
-                  </Text>
-                  <Array name='abcd' repr={{
-                    repr: "string",
-                  }}></Array>
-                </Stack>
-              </Card>
-            </Stack>
-          </Container>
-        </Grid.Col>
-      </Grid>
-    </Card>
+    <Accordion variant='separated'>
+      <Accordion.Item key={`${routeDoc.method}-${routeDoc.path}`} value={`${routeDoc.method}-${routeDoc.path}`}>
+        <Accordion.Control>
+          {routeDoc.method.toUpperCase()} {routeDoc.path}
+        </Accordion.Control>
+        <Accordion.Panel>
+          <Group grow>
+            <Container px={0} py={2}>
+              <Flex dir='row' gap={20} align={"center"} my="sm">
+                <Title
+                  order={4}
+                >
+                  Input Schema
+                </Title>
+                <Select
+                  onChange={(value) => {
+                    setInputVariant(value)
+                  }}
+                  value={inputVariant}
+                  data={
+                    routeDoc.inSchema.map((_schema, index) => {
+                      return {
+                        value: index,
+                        label: `Variant ${index + 1}`
+                      }
+                    })
+                  } />
+              </Flex>
+              <Stack gap="sm">
+                <Accordion multiple={true} variant='separated'>
+                  {
+                    inSchema?.headers?.length > 0 &&
+                    <NamedDescription title="Headers" items={inSchema?.headers || []} />
+                  }
+                  {
+                    inSchema.query.length > 0 &&
+                    <NamedDescription title="Query Parameters" items={inSchema.query} />
+                  }
+                  {
+                    inSchema.params.length > 9 &&
+                    <NamedDescription title="Path Parameters" items={inSchema.params} />
+                  }
+                </Accordion>
+                {
+                  inSchema.body &&
+                  <Accordion multiple variant='separated'>
+                    <Accordion.Item key={"body"} value='body' />
+                    <Accordion.Control>
+                      <Text>
+                        Body
+                      </Text>
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <pre>
+                        {ReprToText(inSchema.body, 1)}
+                      </pre>
+                    </Accordion.Panel>
+                  </Accordion>
+                }
+                {/* <Stack gap="xs">
+                    <Text>
+                      Body
+                    </Text>
+                    <Text>
+                      ARRAY TEST
+                    </Text>
+                    <Array name='abcd' repr={{
+                      repr: "string",
+                    }}></Array>
+                  </Stack> */}
+              </Stack>
+            </Container>
+            <Container px={0} py={2}>
+              <Flex dir='row' gap={20} align={"center"} my="sm">
+                <Title
+                  order={4}
+                >
+                  Output Schema
+                </Title>
+                <Select
+                  onChange={(value) => {
+                    setOutputVariant(value)
+                  }}
+                  value={inputVariant}
+                  data={
+                    routeDoc.outSchema.map((_schema, index) => {
+                      return {
+                        value: index,
+                        label: `Variant ${index + 1}`
+                      }
+                    })
+                  } />
+
+              </Flex>
+              <Stack gap="sm">
+
+                <Accordion multiple={true} defaultValue={defaultOpenAccordionsIn} variant='separated'>
+                  {
+                    outSchema.headers.length > 0 &&
+                    <NamedDescription title="Headers" items={outSchema.headers.map(h => ({ name: h }))} />
+                  }
+                </Accordion>
+                <Card withBorder p="md" radius="md">
+                  {
+                    outSchema.type === "DATA" &&
+                    <pre>
+                      {ReprToText(outSchema.data, 1)}
+                    </pre>
+                  }
+                  {
+                    outSchema.type === "STATIC_REDIRECT" &&
+                    <Text>
+                      Redirect to {outSchema.location}
+                    </Text>
+                  }
+                  {
+                    outSchema.type === "DYNAMIC_REDIRECT" &&
+                    <Text>
+                      Dynamic Redirect {outSchema.description ? `[${outSchema.description}]` : ""}
+                    </Text>
+                  }
+                </Card>
+              </Stack>
+            </Container>
+          </Group>
+        </Accordion.Panel>
+      </Accordion.Item>
+    </Accordion>
   )
 }
 
@@ -274,25 +414,183 @@ function HeaderRender({ header }: {
 }
 
 function NamedDescription({ items: headers, title }: { items: HeaderField[], title: string }) {
-  return (
-    <Card withBorder p="md" radius="md">
-      <Stack gap="sm">
-        <Title order={5}>
-          {title}
-        </Title>
-        {
-          headers.length === 0 && (
-            <Text c="dimmed" size="sm">
-              No headers
-            </Text>
-          )
-        }
-        {headers.map((header, index) => (
-          <HeaderRender key={index} header={header} />
-        ))}
-      </Stack>
-    </Card>
-  )
+  return <Accordion.Item key={title} value={title}>
+    <Accordion.Control>{title}</Accordion.Control>
+    <Accordion.Panel>
+      {
+        headers.length === 0 && (
+          <Text c="dimmed" size="sm">
+            No headers
+          </Text>
+        )
+      }
+      {headers.map((header, index) => (
+        <HeaderRender key={index} header={header} />
+      ))}
+    </Accordion.Panel>
+  </Accordion.Item>
+}
+
+
+function ReprToText(repr: Repr, tabs: number): string {
+  if (repr.repr === "string") {
+    return `string`
+  }
+  if (repr.repr === "number") {
+    return `number`
+  }
+  if (repr.repr === "boolean") {
+    return `boolean`
+  }
+  if (repr.repr === "null") {
+    return `null`
+  }
+  if (repr.repr === "any") {
+    return `any`
+  }
+  if (repr.repr === "unknown") {
+    return "unknown"
+  }
+  if (repr.repr === "nullable") {
+    let as_string = ReprToText(repr.element_type, tabs);
+    return `${as_string} | null`
+  }
+  if (repr.repr === "optional") {
+    let as_string = ReprToText(repr.element_type, tabs);
+    return `${as_string} | undefined`
+  }
+  if (repr.repr === "default") {
+    const as_string = ReprToText(repr.element_type, tabs);
+    const value_as_string = typeof repr.value === "object" ? JSON.stringify(repr.value, null, 2) : typeof repr.value === "string" ? `"${repr.value}"` : repr.value
+    return `${as_string}\n${tabbed_string(tabs, `/*Default Value : ${value_as_string}*/`)}`
+  }
+  if (repr.repr === "array") {
+    const as_string = ReprToText(repr.element_type, tabs);
+    return `${as_string}[]`
+  }
+  if (repr.repr === "enum") {
+    let enum_values = repr.values;
+    let as_string = "";
+    for (let i = 0; i < enum_values.length; i++) {
+      let str = typeof enum_values[i] === "string" ? `"${enum_values[i]}"` : enum_values[i]
+      if (i == (enum_values.length - 1)) {
+        as_string += str
+      } else {
+        as_string += `${str}|`
+      }
+    }
+    return as_string;
+  }
+  if (repr.repr === "union") {
+    let union_values = repr.options;
+    let as_string = "";
+
+    for (let i = 0; i < union_values.length; i++) {
+      if (i == (union_values.length - 1)) {
+        as_string += ReprToText(union_values[i], tabs)
+      } else {
+        as_string += `${ReprToText(union_values[i], tabs)}|`
+      }
+    }
+
+    return as_string;
+  }
+  if (repr.repr === "literal") {
+    let lit_values = repr.values;
+    let as_string = "";
+    for (let i = 0; i < lit_values.length; i++) {
+      let str = typeof lit_values[i] === "string" ? `"${lit_values[i]}"` : lit_values[i]
+      if (i == (lit_values.length - 1)) {
+        as_string += str
+      } else {
+        as_string += `${str}|`
+      }
+    }
+    return as_string;
+  }
+  if (repr.repr === "object") {
+    let as_string = "{"
+    for (const [name, repr_type] of Object.entries(repr.properties)) {
+      as_string += `\n${tabbed_string(tabs, `${name}: ${ReprToText(repr_type, tabs + 1)}`)}`;
+    }
+    as_string += "\n" + tabbed_string(tabs - 1, "}")
+    return as_string;
+  }
+  if (repr.repr === "record") {
+    let as_string = `Record<string,${ReprToText(repr.value_type, tabs + 1)}>`
+    return as_string;
+  }
+  throw new Error("Unknown repr type");
+}
+
+function tabbed_string(tabs: number, string: string) {
+  let tab = "    "
+  let out_str = "";
+  for (let i = 0; i < tabs; i++) {
+    out_str += tab;
+  }
+  out_str = out_str + string;
+  return out_str;
+}
+
+
+function OutputReprToText(name: string, repr: Repr) {
+  if (repr.repr === "string") {
+    return `${name} : string`
+  }
+  if (repr.repr === "number") {
+    return `${name} : number`
+  }
+  if (repr.repr === "boolean") {
+    return `${name} : boolean`
+  }
+  if (repr.repr === "null") {
+    return `${name} : null`
+  }
+  if (repr.repr === "nullable") {
+    let x = OutputReprToText(name, repr.element_type);
+    return `${x} | null`
+  }
+  if (repr.repr === "optional") {
+    let x = OutputReprToText(name, repr.element_type);
+    return `${x} | undefined`
+  }
+  if (repr.repr === "any") {
+    return `${name} : any`
+  }
+  if (repr.repr === "default") {
+    let x = OutputReprToText(name, repr.element_type);
+    let y = JSON.stringify(x, null, 2)
+    return `${x} default : ${y}`
+  }
+  if (repr.repr === "array") {
+    let x = OutputReprToText(name, repr.element_type);
+    return `( ${x} )[]`
+  }
+  if (repr.repr === "enum") {
+    let enum_values = repr.values;
+    let as_string = "";
+    for (let i = 0; i < enum_values.length; i++) {
+      if (i == 0 || i == (enum_values.length - 1)) {
+        as_string += enum_values[i]
+      } else {
+        as_string += `${enum_values[i]}|`
+      }
+    }
+    return `${name} : ${as_string}`
+  }
+  if (repr.repr === "union") {
+    let union_values = repr.options;
+    let as_string = "";
+
+    for (let i = 0; i < union_values.length; i++) {
+      if (i == 0 || i == (union_values.length - 1)) {
+        as_string += union_values[i]
+      } else {
+        as_string += `${union_values[i]}|`
+      }
+    }
+  }
 }
 
 function String({
